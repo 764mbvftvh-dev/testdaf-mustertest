@@ -3,6 +3,7 @@
 德语转语音 · Deutsch → Sprache
 Apple-style GUI · Powered by Qwen-TTS
 """
+import json
 import os
 import sys
 import threading
@@ -15,6 +16,9 @@ import dashscope
 
 # ──────────────────── API 配置 ────────────────────
 dashscope.base_http_api_url = "https://dashscope.aliyuncs.com/api/v1"
+
+# ──────────────────── 本地配置 ────────────────────
+CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".german_tts_config.json")
 
 # ──────────────────── 音色 & 模型 ────────────────────
 VOICES = [
@@ -62,6 +66,7 @@ class App(ctk.CTk):
 
         # ── 状态 ──
         self.is_running = False
+        self._saved_apikey = self._load_api_key()
 
         # ── 布局 ──
         self._build()
@@ -157,6 +162,10 @@ class App(ctk.CTk):
             fg_color=GRAY1, text_color=GRAY6,
         )
         self.apikey_entry.pack(side="left", fill="x", expand=True)
+
+        # 自动填入上次保存的 API Key
+        if self._saved_apikey:
+            self.apikey_entry.insert(0, self._saved_apikey)
 
         self._show_key = False
         self.eye_btn = ctk.CTkButton(
@@ -374,6 +383,9 @@ class App(ctk.CTk):
             messagebox.showwarning("缺少 API Key", "请先填写阿里云百炼 API Key。")
             return
 
+        # 自动保存：下次打开程序自动填入
+        self._save_api_key(api_key)
+
         text = self.textbox.get("0.0", "end").strip()
         if not text or self._ph_active:
             messagebox.showwarning("文本为空", "请输入要转录的德语文字。")
@@ -454,6 +466,26 @@ class App(ctk.CTk):
         self.btn.configure(text="开始转录", state="normal", fg_color=BLUE)
         self._set_status(f"✗ {msg}", RED)
         messagebox.showerror("失败", msg)
+
+    # ─────────── 持久化 ───────────
+    def _load_api_key(self) -> str:
+        """从本地配置文件读取上次保存的 API Key"""
+        try:
+            if os.path.exists(CONFIG_FILE):
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                return cfg.get("api_key", "")
+        except Exception:
+            pass
+        return ""
+
+    def _save_api_key(self, key: str):
+        """将 API Key 保存到本地配置文件"""
+        try:
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump({"api_key": key}, f, ensure_ascii=False)
+        except Exception:
+            pass  # 静默失败，不影响主流程
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@ jobs:
         run: |
           uv run pyinstaller app.py `
             --name="德语转语音" `
-            --onedir `
+            --onefile `
             --windowed `
             --clean `
             --noconfirm `
@@ -40,15 +40,11 @@ jobs:
             --distpath=dist `
             --workpath=build
 
-      - name: 压缩产物
-        run: |
-          Compress-Archive -Path dist\德语转语音 -DestinationPath dist\德语转语音-Windows.zip
-
-      - name: 上传 Windows 产物
+      - name: 上传 Windows 产物（单文件 exe）
         uses: actions/upload-artifact@v4
         with:
           name: 德语转语音-Windows
-          path: dist/德语转语音-Windows.zip
+          path: dist/德语转语音.exe
           retention-days: 30
 
   # ────────────────────────── macOS ────────────────────────────────

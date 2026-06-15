@@ -289,22 +289,14 @@ class ReadingAufgabe1Generator(BaseReadingGenerator):
         return payload
 
     def _prepare_example_offer(self, payload: dict) -> dict:
-        import random
         offers = payload["offers"]
         answers = payload["answers"]
         available_labels = [offer["label"] for offer in offers]
         used_labels = [answer["answer"] for answer in answers if answer["answer"] != "I"]
         unused_labels = [label for label in available_labels if label not in used_labels]
-        if unused_labels:
-            example_label = random.choice(unused_labels)
-        else:
-            example_label = random.choice(available_labels)
-            for answer in answers:
-                if answer["answer"] == example_label:
-                    answer["answer"] = "I"
-                    answer["evidence"] = "Keine passende Stelle in den Texten A-H"
-                    answer["matching_reason"] = "Keine Übereinstimmung mit den Kriterien"
-                    break
+        if not unused_labels:
+            raise RuntimeError("阅读第一题需要至少 1 篇未被答案使用的短文作为示例")
+        example_label = unused_labels[0]
         payload["example_offer_label"] = example_label
         return payload
 

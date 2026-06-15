@@ -73,7 +73,7 @@ document.querySelectorAll('.chart-count').forEach(function(select) {
   select.addEventListener('change', function() {
     var taskNum = this.getAttribute('data-task');
     var count = parseInt(this.value);
-    for (var i = 1; i <= 3; i++) {
+    for (var i = 1; i <= 2; i++) {
       var row = document.getElementById('chart-type-row-' + taskNum + '-' + i);
       row.style.display = (i <= count) ? '' : 'none';
     }

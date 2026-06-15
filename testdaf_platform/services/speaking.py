@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import dashscope
-from dashscope import Generation
 
 from testdaf_platform.config import DASHSCOPE_BASE_URL, QWEN_TEXT_MODEL
 
@@ -95,17 +94,16 @@ class SpeakingTaskGenerator:
 
     def generate(self, api_key: str, data: SpeakingTaskInput) -> dict:
         profile = TASK_PROFILES[data.number]
-        self._generated_chart_count = max(1, min(data.chart_count, 2)) if profile["needs_chart"] else 0
-        resp = Generation.call(
+        expected_chart_count = max(1, min(data.chart_count, 2)) if profile["needs_chart"] else 0
+        resp = dashscope.MultiModalConversation.call(
             model=self.model,
             api_key=api_key,
             messages=[{"role": "user", "content": self._build_content(data, profile)}],
-            max_tokens=4000,
         )
         if resp.status_code != 200:
             raise RuntimeError(f"API 错误 {resp.status_code}: {resp.message or resp.code}")
         payload = self._parse_json(self._extract_text(resp))
-        self._validate(payload, data.number, profile)
+        self._validate(payload, data.number, profile, expected_chart_count)
         payload["number"] = data.number
         payload["task_type"] = profile["name"]
         payload["prep_time"] = profile["prep_time"]
@@ -194,7 +192,13 @@ class SpeakingTaskGenerator:
         )
 
     def _extract_text(self, response: object) -> str:
-        return response.output.text.strip() if response.output.text else ""
+        message = response.output.choices[0].message
+        content = message.content
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return "\n".join(str(item.get("text", "")) for item in content if isinstance(item, dict)).strip()
+        return str(content).strip()
 
     def _parse_json(self, content: str) -> dict:
         cleaned = content.strip()
@@ -209,7 +213,7 @@ class SpeakingTaskGenerator:
                 raise RuntimeError("无法从 API 响应中解析口语题 JSON")
             return json.loads(match.group(0))
 
-    def _validate(self, payload: dict, number: int, profile: dict) -> None:
+    def _validate(self, payload: dict, number: int, profile: dict, expected_chart_count: int) -> None:
         for key in ("title", "scenario", "prompt_points", "examiner_intro", "chart_specs"):
             if key not in payload:
                 raise RuntimeError(f"口语 Aufgabe {number} 生成结果缺少字段：{key}")
@@ -221,9 +225,9 @@ class SpeakingTaskGenerator:
             raise RuntimeError(f"口语 Aufgabe {number} 引子语音文本过短")
         charts = payload["chart_specs"]
         if profile["needs_chart"]:
-            if not isinstance(charts, list) or len(charts) < 1:
-                raise RuntimeError(f"口语 Aufgabe {number} 至少需要 1 张图表")
-            for i, chart in enumerate(charts):
+            if not isinstance(charts, list) or len(charts) != expected_chart_count:
+                raise RuntimeError(f"口语 Aufgabe {number} 必须生成 {expected_chart_count} 张图表")
+            for chart in charts:
                 self._validate_chart(chart, number)
         elif charts:
             payload["chart_specs"] = []

@@ -46,12 +46,20 @@
       </div>
       {% if profile.needs_chart %}
       <div class="form-row">
-        <label>图表类型偏好<select name="task_{{ number }}_chart_type_preference"><option value="mixed" selected>自动</option><option value="bar">柱状图</option><option value="line">折线图</option><option value="pie">比例图</option></select></label>
+        <label>图表数量<select name="task_{{ number }}_chart_count" class="chart-count" data-task="{{ number }}"><option value="1" selected>1 张</option><option value="2">2 张</option></select></label>
         <label>本题参考图片<input name="task_{{ number }}_reference_images" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
       </div>
+      <div class="chart-types-container" id="chart-types-{{ number }}">
+        <div class="form-row chart-type-row" id="chart-type-row-{{ number }}-1">
+          <label>图表 1 形状<select name="task_{{ number }}_chart_type_1"><option value="mixed" selected>自动</option><option value="bar">柱状图</option><option value="line">折线图</option><option value="pie">比例图</option></select></label>
+</div>
+        <div class="form-row chart-type-row" id="chart-type-row-{{ number }}-2" style="display:none">
+           <label>图表 2 形状<select name="task_{{ number }}_chart_type_2"><option value="mixed" selected>自动</option><option value="bar">柱状图</option><option value="line">折线图</option><option value="pie">比例图</option></select></label>
+ </div>       
+</div>
       <label>参考图片说明<textarea name="task_{{ number }}_image_notes" rows="3" placeholder="可选。说明参考图片中的图表趋势、数据、对比对象或需要转化的内容。"></textarea></label>
       {% else %}
-      <input type="hidden" name="task_{{ number }}_chart_type_preference" value="none">
+      <input type="hidden" name="task_{{ number }}_chart_count" value="0">
       {% endif %}
     </section>
     {% endfor %}
@@ -59,6 +67,19 @@
     <button class="button primary" type="submit">生成口语 7 题套卷并保存到本地题库</button>
   </form>
 </section>
+
+<script>
+document.querySelectorAll('.chart-count').forEach(function(select) {
+  select.addEventListener('change', function() {
+    var taskNum = this.getAttribute('data-task');
+    var count = parseInt(this.value);
+    for (var i = 1; i <= 3; i++) {
+      var row = document.getElementById('chart-type-row-' + taskNum + '-' + i);
+      row.style.display = (i <= count) ? '' : 'none';
+    }
+  });
+});
+</script>
 
 {% include "teacher_preview_block.html" %}
 {% include "teacher_question_list_block.html" %}

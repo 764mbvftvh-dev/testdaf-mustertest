@@ -509,7 +509,7 @@ def create_reading_aufgabe_1(
     reference_urls: str = Form(""),
     difficulty: str = Form("standard"),
     offer_count: int = Form(8),
-    no_match_count: int = Form(2),
+    no_match_count: int = Form(3),
     api_key: str = Form(""),
 ) -> RedirectResponse:
     try:
@@ -702,7 +702,8 @@ async def create_speaking_aufgabe(request: Request, number: int) -> RedirectResp
             "difficulty": str(form.get("difficulty", "standard")),
             "examiner_role": str(form.get("examiner_role", "")).strip() or _default_speaking_role(number),
             "voice": str(form.get("voice", "Cherry")),
-            "chart_type_preference": str(form.get("chart_type_preference", "mixed")),
+            "chart_count": int(form.get("chart_count", "1")),
+            "chart_types": _parse_chart_types(form, int(form.get("chart_count", "1"))),
         }
         if not params["topic"]:
             raise RuntimeError("请填写参考主题。")
@@ -723,7 +724,8 @@ async def create_speaking_aufgabe(request: Request, number: int) -> RedirectResp
                     difficulty=params["difficulty"],
                     examiner_role=params["examiner_role"],
                     voice=params["voice"],
-                    chart_type_preference=params["chart_type_preference"],
+                    chart_count=params["chart_count"],
+                    chart_types=params["chart_types"],
                     reference_image_paths=reference_image_paths,
                 ),
             )
@@ -782,7 +784,8 @@ async def create_speaking_test_set(request: Request) -> RedirectResponse:
             image_notes = str(form.get(f"task_{number}_image_notes", "")).strip()
             examiner_role = str(form.get(f"task_{number}_examiner_role", "")).strip()
             voice = str(form.get(f"task_{number}_voice", "Cherry"))
-            chart_type_preference = str(form.get(f"task_{number}_chart_type_preference", "mixed"))
+            chart_count = int(form.get(f"task_{number}_chart_count", "1"))
+            chart_types = _parse_chart_types(form, chart_count, prefix=f"task_{number}_")
             if not topic:
                 raise RuntimeError(f"请填写 Aufgabe {number} 的主题。")
             if not examiner_role:
@@ -802,7 +805,8 @@ async def create_speaking_test_set(request: Request) -> RedirectResponse:
                     difficulty=difficulty,
                     examiner_role=examiner_role,
                     voice=voice,
-                    chart_type_preference=chart_type_preference,
+                    chart_count=chart_count,
+                    chart_types=chart_types,
                     reference_image_paths=reference_image_paths,
                 ),
             )
@@ -925,6 +929,15 @@ def _form_uploads(form: object, field_name: str) -> list[UploadFile]:
     values = form.getlist(field_name) if hasattr(form, "getlist") else []
     return [value for value in values if isinstance(value, UploadFile) and value.filename]
 
+
+def _parse_chart_types(form, count: int, prefix: str = "") -> list[str]:
+    """Parse chart types from form fields for speaking tasks."""
+    chart_types = []
+    for i in range(1, count + 1):
+        value = form.get(f"{prefix}chart_type_{i}")
+        if value:
+            chart_types.append(str(value))
+    return chart_types
 
 def _default_speaking_role(number: int) -> str:
     return {

@@ -283,8 +283,29 @@ class ReadingAufgabe1Generator(BaseReadingGenerator):
         payload = self._call_generation(api_key, self._system_prompt(), self._user_prompt(data), 7000)
         self._validate(payload, data.offer_count, data.no_match_count, validate_lengths=False)
         payload = self._repair_offer_lengths(api_key, payload, data.offer_count, data.no_match_count)
+        payload = self._prepare_example_offer(payload)
         self._validate(payload, data.offer_count, data.no_match_count)
         self._annotate_offer_lengths(payload)
+        return payload
+
+    def _prepare_example_offer(self, payload: dict) -> dict:
+        import random
+        offers = payload["offers"]
+        answers = payload["answers"]
+        available_labels = [offer["label"] for offer in offers]
+        used_labels = [answer["answer"] for answer in answers if answer["answer"] != "I"]
+        unused_labels = [label for label in available_labels if label not in used_labels]
+        if unused_labels:
+            example_label = random.choice(unused_labels)
+        else:
+            example_label = random.choice(available_labels)
+            for answer in answers:
+                if answer["answer"] == example_label:
+                    answer["answer"] = "I"
+                    answer["evidence"] = "Keine passende Stelle in den Texten A-H"
+                    answer["matching_reason"] = "Keine Übereinstimmung mit den Kriterien"
+                    break
+        payload["example_offer_label"] = example_label
         return payload
 
     def _system_prompt(self) -> str:

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import dashscope
+from dashscope import Generation
 
 from testdaf_platform.config import DASHSCOPE_BASE_URL, QWEN_TEXT_MODEL
 
@@ -81,8 +82,9 @@ class SpeakingTaskInput:
     difficulty: str
     examiner_role: str
     voice: str
-    chart_type_preference: str
-    reference_image_paths: list[Path]
+    chart_count: int = 1
+    chart_types: list[str] | None = None
+    reference_image_paths: list[Path] | None = None
 
 
 class SpeakingTaskGenerator:
@@ -93,10 +95,12 @@ class SpeakingTaskGenerator:
 
     def generate(self, api_key: str, data: SpeakingTaskInput) -> dict:
         profile = TASK_PROFILES[data.number]
-        resp = dashscope.MultiModalConversation.call(
+        self._generated_chart_count = max(1, min(data.chart_count, 2)) if profile["needs_chart"] else 0
+        resp = Generation.call(
             model=self.model,
             api_key=api_key,
             messages=[{"role": "user", "content": self._build_content(data, profile)}],
+            max_tokens=4000,
         )
         if resp.status_code != 200:
             raise RuntimeError(f"API 错误 {resp.status_code}: {resp.message or resp.code}")
@@ -112,7 +116,7 @@ class SpeakingTaskGenerator:
         return payload
 
     def _build_content(self, data: SpeakingTaskInput, profile: dict) -> list[dict]:
-        content = [{"image": f"file://{path.resolve()}"} for path in data.reference_image_paths]
+        content = [{"image": f"file://{path.resolve()}"} for path in (data.reference_image_paths or [])]
         content.append({"text": self._prompt(data, profile)})
         return content
 
@@ -122,17 +126,40 @@ class SpeakingTaskGenerator:
             if data.reference_image_paths
             else "未提供参考图片。"
         )
-        chart_schema = (
-            '  "chart_specs": [{"type": "bar", "title": "标题", "unit": "单位", "source_note": "Quelle: ...", "data": [{"label": "A", "value": 10}]}],\n'
-            if profile["needs_chart"]
-            else '  "chart_specs": [],\n'
-        )
-        chart_requirement = (
-            "本题必须生成 1 张图表，chart_specs 长度必须为 1。图表 type 只能是 bar、line 或 pie，"
-            f"优先参考老师偏好：{data.chart_type_preference}。图表数据要服务于口语题中的描述、原因或影响分析。\n"
-            if profile["needs_chart"]
-            else "本题不需要图表，chart_specs 必须为空数组。\n"
-        )
+        chart_count = max(1, min(data.chart_count, 2))
+        chart_types = (data.chart_types or [])[:chart_count]
+        if len(chart_types) < chart_count:
+            chart_types += ["mixed"] * (chart_count - len(chart_types))
+        type_labels = {"bar": "柱状图", "line": "折线图", "pie": "比例图", "mixed": "自动"}
+        chart_spec_examples = []
+        for i in range(chart_count):
+            ct = chart_types[i]
+            if ct == "mixed":
+                chart_spec_examples.append(
+                    f'    {{"type": "bar", "title": "图表{i + 1}标题", "unit": "单位", '
+                    f'"source_note": "Quelle: ...", "data": [{{"label": "A", "value": 10}}]}}'
+                )
+            else:
+                chart_spec_examples.append(
+                    f'    {{"type": "{ct}", "title": "图表{i + 1}标题", "unit": "单位", '
+                    f'"source_note": "Quelle: ...", "data": [{{"label": "A", "value": 10}}]}}'
+                )
+        if profile["needs_chart"]:
+            chart_schema = '  "chart_specs": [\n' + ",\n".join(chart_spec_examples) + "\n  ],\n"
+            type_hints = []
+            for i, ct in enumerate(chart_types):
+                if ct != "mixed":
+                    type_hints.append(f"图表 {i + 1} 必须是 {type_labels.get(ct, ct)}")
+            type_note = "；".join(type_hints)
+            chart_requirement = (
+                f"本题必须生成 {chart_count} 张图表，chart_specs 长度必须为 {chart_count}。"
+                f"图表 type 只能是 bar、line 或 pie。"
+                + (f" {type_note}。" if type_note else "")
+                + "图表数据要服务于口语题中的描述、原因或影响分析。\n"
+            )
+        else:
+            chart_schema = '  "chart_specs": [],\n'
+            chart_requirement = "本题不需要图表，chart_specs 必须为空数组。\n"
         return (
             "你是 TestDaF Mündlicher Ausdruck 出题专家，负责生成单道口语题。"
             "题目必须贴近德国大学生活、学习、社会讨论或日常沟通场景。"
@@ -152,8 +179,8 @@ class SpeakingTaskGenerator:
             "生成要求：\n"
             "- scenario 用德语写，简短说明考生所处情境和要做什么。\n"
             "- prompt_points 用德语写 2-4 条，必须是考生回答要点。\n"
-            "- examiner_intro 用德语写，是发问者在准备时间后对考生说的一小段自然引子，适合 TTS，长度 1-3 句。\n"
-            "- examiner_intro 要符合角色身份，直接邀请考生开始回答。\n"
+            "- examiner_intro 用德语写，是发问者在准备时间后对考生说的简短引子，必须只写 1-2 句话，适合 TTS。\n"
+            "- examiner_intro 要符合角色身份，直接邀请考生开始回答，禁止添加背景解释或过长铺垫。\n"
             "- Aufgabe 7 必须是具体生活化选择建议场景，不要写成抽象政策题。\n\n"
             "请只输出合法 JSON，不要输出 Markdown、解释、代码块或 JSON 外文字。结构如下：\n"
             "{\n"
@@ -167,13 +194,7 @@ class SpeakingTaskGenerator:
         )
 
     def _extract_text(self, response: object) -> str:
-        message = response.output.choices[0].message
-        content = message.content
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            return "\n".join(str(item.get("text", "")) for item in content if isinstance(item, dict)).strip()
-        return str(content).strip()
+        return response.output.text.strip() if response.output.text else ""
 
     def _parse_json(self, content: str) -> dict:
         cleaned = content.strip()
@@ -200,9 +221,10 @@ class SpeakingTaskGenerator:
             raise RuntimeError(f"口语 Aufgabe {number} 引子语音文本过短")
         charts = payload["chart_specs"]
         if profile["needs_chart"]:
-            if not isinstance(charts, list) or len(charts) != 1:
-                raise RuntimeError(f"口语 Aufgabe {number} 必须生成 1 张图表")
-            self._validate_chart(charts[0], number)
+            if not isinstance(charts, list) or len(charts) < 1:
+                raise RuntimeError(f"口语 Aufgabe {number} 至少需要 1 张图表")
+            for i, chart in enumerate(charts):
+                self._validate_chart(chart, number)
         elif charts:
             payload["chart_specs"] = []
 

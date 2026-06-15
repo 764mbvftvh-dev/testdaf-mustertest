@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import dashscope
+from dashscope import Generation
 
 from testdaf_platform.config import DASHSCOPE_BASE_URL, QWEN_TEXT_MODEL
 
@@ -43,16 +44,26 @@ class WritingAufgabe1Generator:
         return payload
 
     def _call_generation(self, api_key: str, data: WritingAufgabe1Input) -> dict:
-        content = self._build_multimodal_content(data)
-        resp = dashscope.MultiModalConversation.call(
-            model=self.model,
-            api_key=api_key,
-            messages=[{"role": "user", "content": content}],
-        )
+        if data.reference_image_paths:
+            content = self._build_multimodal_content(data)
+            resp = dashscope.MultiModalConversation.call(
+                model=self.model,
+                api_key=api_key,
+                messages=[{"role": "user", "content": content}],
+            )
+            text = self._extract_multimodal_text(resp)
+        else:
+            resp = Generation.call(
+                model=self.model,
+                api_key=api_key,
+                messages=[{"role": "user", "content": self._user_prompt(data)}],
+                max_tokens=6000,
+            )
+            text = resp.output.text
+
         if resp.status_code != 200:
             raise RuntimeError(f"API 错误 {resp.status_code}: {resp.message or resp.code}")
 
-        text = self._extract_text(resp)
         if not text:
             raise RuntimeError("API 未返回写作题内容")
         return self._parse_json(text)
@@ -64,7 +75,7 @@ class WritingAufgabe1Generator:
         content.append({"text": self._user_prompt(data)})
         return content
 
-    def _extract_text(self, response: object) -> str:
+    def _extract_multimodal_text(self, response: object) -> str:
         message = response.output.choices[0].message
         content = message.content
         if isinstance(content, str):
@@ -299,14 +310,40 @@ class ChartRenderer:
                 '<line x1="80" y1="74" x2="80" y2="370" stroke="#70777a" stroke-width="2"/>'
                 '<line x1="80" y1="370" x2="780" y2="370" stroke="#70777a" stroke-width="2"/>'
             )
+        title_lines = self._wrap_title(spec.get("title", "Grafik"), width - 80, font_size=22)
+        title_elements = []
+        title_y = 40
+        for line in title_lines:
+            title_elements.append(
+                f'<text x="40" y="{title_y}" font-size="22" font-weight="700" fill="#1e2528">{_esc(line)}</text>'
+            )
+            title_y += 28
         return (
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
             '<rect width="100%" height="100%" rx="22" fill="#fffaf0"/>'
-            f'<text x="40" y="42" font-size="24" font-weight="700" fill="#1e2528">{_esc(spec.get("title", "Grafik"))}</text>'
+            f'{"".join(title_elements)}'
             f'<text x="40" y="{height - 18}" font-size="13" fill="#70777a">{_esc(spec.get("source_note", ""))}</text>'
             f'<text x="{width - 40}" y="{height - 18}" text-anchor="end" font-size="13" fill="#70777a">Einheit: {_esc(spec.get("unit", ""))}</text>'
             f"{axis}{body}</svg>"
         )
+
+    def _wrap_title(self, title: str, max_width: int, font_size: int) -> list[str]:
+        avg_char_width = font_size * 0.58
+        max_chars = int(max_width / avg_char_width)
+        words = title.split()
+        lines = []
+        current = []
+        for word in words:
+            test = " ".join(current + [word])
+            if len(test) <= max_chars:
+                current.append(word)
+            else:
+                if current:
+                    lines.append(" ".join(current))
+                current = [word]
+        if current:
+            lines.append(" ".join(current))
+        return lines if lines else [title]
 
 
 def _esc(value: object) -> str:

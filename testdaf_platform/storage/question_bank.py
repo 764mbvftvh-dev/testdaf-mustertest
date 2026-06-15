@@ -835,6 +835,7 @@ class QuestionBank:
         return "\n".join(lines).strip() + "\n"
 
     def _build_reading_aufgabe_1_preview_markdown(self, generation: dict) -> str:
+        example_label = generation.get("example_offer_label", "")
         lines = [
             f"## Lesetext 1: {generation['title']}",
             "",
@@ -845,6 +846,8 @@ class QuestionBank:
             generation["scenario"],
             "",
             "### Texte A-H",
+            "",
+            f"*示例短文（{example_label}）不在练习题中出现",
             "",
         ]
         metadata = generation.get("length_metadata", {})
@@ -862,7 +865,8 @@ class QuestionBank:
                 lines.append(f"- {label}: `{item.get('bytes')}` bytes · `{item.get('status')}`")
             lines.append("")
         for offer in generation["offers"]:
-            lines.append(f"#### {offer['label']}. {offer['heading']}")
+            is_example = " ★（示例）" if offer["label"] == example_label else ""
+            lines.append(f"#### {offer['label']}. {offer['heading']}{is_example}")
             lines.append(offer["text"])
             lines.append("")
         lines.extend(["### Personen 1-10", ""])

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}练习 · {{ question.title }}{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <p class="muted">{{ question.section }} · {{ question.task_type }}</p>
+  <h1>{{ question.title }}</h1>
+  <p>{{ question.topic }}</p>
+</section>
+
+<section class="panel">
+  <h2>题目资源</h2>
+  {% if bundle.manifest.assets.audio %}
+  <p><audio controls src="/question-bank/{{ bundle.path }}/{{ bundle.manifest.assets.audio }}"></audio></p>
+  {% endif %}
+  {% if bundle.preview %}
+  <div class="preview">{{ bundle.preview }}</div>
+  {% else %}
+  <p class="muted">该题目包暂无 preview。</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>作答保存</h2>
+  <p class="muted">学生作答协议尚未最终固定。下一阶段将在这里接入按题型渲染的答题表单，并写入 <code>student_attempts/</code>。</p>
+</section>
+{% endblock %}

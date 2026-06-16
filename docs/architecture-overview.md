@@ -4,9 +4,10 @@
 
 ## 项目定位
 
-- 本项目是本地优先的 TestDaF 模拟考试出题与题库管理 Web 系统。
-- 当前核心用户是老师，主要能力是生成听力、阅读、写作、口语题目包，并保存到本地 `question_bank/`。
-- Web 层使用 FastAPI + Jinja2，生成能力依赖阿里云百炼 DashScope / Qwen，题库使用本地文件系统。
+- 本项目是本地优先的 TestDaF 模拟考试系统，正在拆分为出题、学生答题、评分三个本地系统。
+- 出题系统负责生成题目包并保存到 `question_bank/`。
+- 学生系统只读 `question_bank/`，未来保存作答到 `student_attempts/`。
+- 评分系统未来读取 `student_attempts/` 和 `question_bank/`，输出到 `grading_results/`。
 - 当前不是多租户系统，也没有数据库、登录态、权限模型或服务端任务队列。
 
 ## 快速入口
@@ -18,6 +19,9 @@
 - 统一文本模型客户端：[text_generation.py](file:///Users/bytedance/德语转语音/testdaf_platform/services/text_generation.py)
 - 题库管理路由：[teacher_manage.py](file:///Users/bytedance/德语转语音/testdaf_platform/routers/teacher_manage.py)
 - 第一个 usecase 样板：[create_listening_aufgabe_1.py](file:///Users/bytedance/德语转语音/testdaf_platform/usecases/create_listening_aufgabe_1.py)
+- 学生系统入口：[student_platform/web.py](file:///Users/bytedance/德语转语音/student_platform/web.py)
+- 共享题库只读 reader：[reader.py](file:///Users/bytedance/德语转语音/shared/question_bank/reader.py)
+- 评分系统占位：[scoring_platform/README.md](file:///Users/bytedance/德语转语音/scoring_platform/README.md)
 - 架构拆路由计划：[route-splitting-plan.md](file:///Users/bytedance/德语转语音/docs/route-splitting-plan.md)
 
 ## 目录职责
@@ -32,6 +36,9 @@ testdaf_platform/
   storage/               # 本地题库文件系统读写
   templates/             # Jinja2 页面模板
   static/                # CSS 等静态资源
+student_platform/        # 独立学生答题系统，只读 question_bank
+scoring_platform/        # 评分系统占位，等待学生作答协议稳定
+shared/                  # 三系统共享的文件工具、路径保护、题库只读 reader
 tests/                   # 回归测试和架构关键点测试
 scripts/                 # 诊断脚本，例如 DashScope 模型可用性检查
 docs/                    # 架构、路线图和业务分析文档
@@ -40,33 +47,17 @@ docs/                    # 架构、路线图和业务分析文档
 ## 总体架构图
 
 ```mermaid
-flowchart TB
-    Browser[浏览器 / 老师端页面] --> FastAPI[FastAPI app<br/>testdaf_platform/web.py]
-    FastAPI --> Templates[Jinja2 templates]
-    FastAPI --> ManageRouter[routers/teacher_manage.py]
-    FastAPI --> UseCases[usecases/]
-    FastAPI --> LegacyPosts[尚未迁移的出题 POST 流程]
+flowchart LR
+    Authoring[出题系统<br/>testdaf_platform] -->|写入题目包| QB[(question_bank/)]
+    Student[学生答题系统<br/>student_platform] -->|只读题目包| QB
+    Student -->|未来写入作答包| Attempts[(student_attempts/)]
+    Scoring[评分系统<br/>scoring_platform] -->|未来读取作答包| Attempts
+    Scoring -->|未来读取题目答案| QB
+    Scoring -->|未来写入评分报告| Results[(grading_results/)]
 
-    ManageRouter --> QuestionBank[storage/QuestionBank]
-    ManageRouter --> ExportService[services/ExportService]
-
-    UseCases --> Generators[题型生成器<br/>listening/reading/writing/speaking]
-    LegacyPosts --> Generators
-    UseCases --> ReferenceMaterial[ReferenceMaterialService]
-    LegacyPosts --> ReferenceMaterial
-    UseCases --> TTS[MultiSpeakerTTSService / TTSService]
-    LegacyPosts --> TTS
-    UseCases --> QuestionBank
-    LegacyPosts --> QuestionBank
-
-    Generators --> TextClient[TextGenerationClient]
-    TextClient --> DashScopeText[DashScope text-generation]
-    TextClient --> DashScopeMM[DashScope multimodal-generation]
-    TTS --> DashScopeTTS[DashScope Qwen-TTS]
-    TTS --> OSS[DashScope 返回的 OSS 音频 URL]
-
-    QuestionBank --> LocalFS[(question_bank/ 本地题库)]
-    ExportService --> Downloads[(downloads/ 本地导出目录)]
+    Authoring --> Shared[shared/ 文件工具]
+    Student --> Shared
+    Scoring --> Shared
 ```
 
 ## 核心生成链路
@@ -172,6 +163,10 @@ question_bank/
 
 ## 当前已完成的架构改造
 
+- 代码库已显式拆出 `testdaf_platform/`、`student_platform/`、`scoring_platform/`、`shared/`。
+- 学生系统已有独立 FastAPI 入口，可只读 `question_bank/` 展示题目包。
+- 评分系统已有占位说明，等待学生作答协议稳定后实现。
+- `shared/` 已提供原子 JSON、路径保护、题库只读 reader。
 - 题库管理路由已从 `web.py` 拆到 `routers/teacher_manage.py`。
 - `Listening Aufgabe 1` 创建流程已抽成 usecase 样板。
 - 文本模型调用已统一到 `TextGenerationClient`。
@@ -184,6 +179,8 @@ question_bank/
 
 - `web.py` 仍包含大量页面路由和大部分题型 POST 编排，后续应继续迁移到 `routers/` 和 `usecases/`。
 - `QuestionBank` 仍承担保存、读取、预览、垃圾箱、重命名等多种职责，后续可拆为 repository / asset store / trash service。
+- 学生系统当前还只是题目浏览和练习入口骨架，作答保存协议尚未固定。
+- 评分系统当前只保留边界说明，尚未实现。
 - 多数题型生成结果仍以裸 `dict` 在服务层、存储层、导出层传递，字段变更容易产生隐式耦合。
 - `JobManager` 是内存态，重启后口语生成任务状态会丢失。
 - `/question-bank` 静态挂载仍暴露完整题库资源，部署到多人环境前必须增加访问控制。
@@ -194,12 +191,14 @@ question_bank/
 
 1. `docs/architecture-overview.md`
 2. `README.md`
-3. `testdaf_platform/web.py`
-4. `testdaf_platform/services/text_generation.py`
-5. `testdaf_platform/usecases/create_listening_aufgabe_1.py`
-6. `testdaf_platform/storage/question_bank.py`
-7. `testdaf_platform/routers/teacher_manage.py`
-8. 具体要改哪个题型，再读取对应 `services/<题型>.py` 和 `templates/teacher_*.html`
+3. `README.md`
+4. `student_platform/web.py`
+5. `shared/question_bank/reader.py`
+6. `testdaf_platform/web.py`
+7. `testdaf_platform/services/text_generation.py`
+8. `testdaf_platform/usecases/create_listening_aufgabe_1.py`
+9. `testdaf_platform/storage/question_bank.py`
+10. 具体要改哪个题型，再读取对应 `services/<题型>.py` 和 `templates/teacher_*.html`
 
 不建议默认读取或分析：
 
@@ -212,6 +211,8 @@ question_bank/
 
 - 新的文本生成调用必须走 `TextGenerationClient`。
 - 新增题型创建流程应优先按 `CreateListeningAufgabe1UseCase` 的模式抽 usecase。
+- 学生系统只读 `question_bank/`，不要 import 出题生成器或写题库。
+- 评分系统未来只读 `question_bank/` 和 `student_attempts/`，只写 `grading_results/`。
 - 新增管理类路由应放入 `routers/`，不要继续塞进 `web.py`。
 - 新增题库 JSON 写入必须复用 `QuestionBank._write_json()` 或同等原子写入策略。
 - 不要重新公开挂载 `/downloads`。
@@ -220,7 +221,7 @@ question_bank/
 ## 常用验证命令
 
 ```bash
-uv run python -m compileall testdaf_platform tests scripts
+uv run python -m compileall testdaf_platform student_platform shared tests scripts
 uv run python -m unittest discover -s tests -v
 uv run python scripts/check_dashscope_model.py --model qwen3.7-plus --compare qwen-plus
 ```

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}TestDaF 学生答题系统{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <nav class="nav">
+      <a href="/">练习首页</a>
+      <a href="/attempts">作答记录</a>
+    </nav>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

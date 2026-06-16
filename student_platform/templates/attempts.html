@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}作答记录 · TestDaF{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <h1>作答记录</h1>
+  <p class="muted">当前目录中共有 {{ attempt_count }} 个作答包。</p>
+</section>
+
+<section class="panel">
+  {% if attempts %}
+  <div class="table">
+    {% for attempt in attempts %}
+    <article class="table-row">
+      <strong>{{ attempt }}</strong>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p>暂无作答记录。下一阶段提交练习后会写入 <code>student_attempts/</code>。</p>
+  {% endif %}
+</section>
+{% endblock %}

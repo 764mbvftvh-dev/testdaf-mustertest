@@ -5,30 +5,16 @@
 {% block content %}
 <section class="page-head">
   <p class="eyebrow">Student Portal</p>
-  <h1>学生答题入口</h1>
-  <p class="lead">当前阶段展示题库消费入口，下一阶段会按题型加载听力材料、播放音频并保存作答记录。</p>
+  <h1>学生答题系统已独立</h1>
+  <p class="lead">学生答题系统不再挂在出题系统内部。请单独启动学生系统，并通过文件读取 <code>question_bank/</code>。</p>
 </section>
 
 <section class="panel">
   <div class="panel-title">
-    <h2>可用题目包</h2>
-    <span>{{ questions|length }} 条</span>
+    <h2>启动方式</h2>
   </div>
-  {% if questions %}
-  <div class="table">
-    {% for question in questions %}
-    <article class="table-row">
-      <div>
-        <strong>{{ question.title }}</strong>
-        <small>{{ question.section }} · {{ question.task_type }} · {{ question.topic }}</small>
-      </div>
-      <span>{{ question.id }}</span>
-    </article>
-    {% endfor %}
-  </div>
-  {% else %}
-  <p class="empty">暂无题目包。请先在老师后台创建听力题草稿。</p>
-  {% endif %}
+  <p>命令行运行：</p>
+  <pre><code>uv run python student_main.py</code></pre>
+  <p>默认访问地址：<a href="{{ student_url }}">{{ student_url }}</a></p>
 </section>
 {% endblock %}
-

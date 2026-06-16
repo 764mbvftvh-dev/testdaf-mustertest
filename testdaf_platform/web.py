@@ -844,13 +844,12 @@ async def create_speaking_test_set(request: Request) -> RedirectResponse:
 
 @app.get("/student", response_class=HTMLResponse)
 def student_entry(request: Request) -> HTMLResponse:
-    questions = question_bank.list_questions()
     return templates.TemplateResponse(
         request=request,
         name="student.html",
         context={
             "request": request,
-            "questions": questions,
+            "student_url": "http://127.0.0.1:8001/",
         },
     )
 

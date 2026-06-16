@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from shared.file_io.atomic_json import read_json, write_json_atomic
+from shared.file_io.path_guard import resolve_inside
 from testdaf_platform.config import QUESTION_BANK_DIR
 
 TRASH_RETENTION_DAYS = 7
@@ -601,8 +603,7 @@ class QuestionBank:
         for manifest_path in sorted(base.glob("**/manifest.json"), reverse=True):
             if ".trash" in str(manifest_path):
                 continue
-            with manifest_path.open("r", encoding="utf-8") as file:
-                data = json.load(file)
+            data = read_json(manifest_path)
             data["_path"] = str(manifest_path.parent.relative_to(self.root))
             manifests.append(data)
         return manifests
@@ -614,13 +615,7 @@ class QuestionBank:
     def _resolve_inside(self, base: Path, relative_path: str, error_message: str) -> Path:
         if not relative_path:
             raise RuntimeError(error_message)
-        base_path = base.resolve()
-        candidate = (base / relative_path).resolve()
-        try:
-            candidate.relative_to(base_path)
-        except ValueError as exc:
-            raise RuntimeError(error_message) from exc
-        return candidate
+        return resolve_inside(base, relative_path, error_message)
 
     def _resolve_question_path(self, relative_path: str) -> Path:
         return self._resolve_inside(self.root, relative_path, "题目路径非法")
@@ -641,8 +636,7 @@ class QuestionBank:
             "original_path": normalized_path,
             "section": section,
         }
-        with (src / "manifest.json").open("r", encoding="utf-8") as f:
-            manifest = json.load(f)
+        manifest = read_json(src / "manifest.json")
         trash_info["title"] = manifest.get("title", "")
         trash_info["task_type"] = manifest.get("task_type", "")
         trash_target.parent.mkdir(parents=True, exist_ok=True)
@@ -658,8 +652,7 @@ class QuestionBank:
         info_path = src / ".trash_info.json"
         if not info_path.exists():
             raise RuntimeError("垃圾箱信息丢失")
-        with info_path.open("r", encoding="utf-8") as f:
-            trash_info = json.load(f)
+        trash_info = read_json(info_path)
         original_path = trash_info.get("original_path", "")
         if not original_path:
             raise RuntimeError("无法确定原始位置")
@@ -678,8 +671,7 @@ class QuestionBank:
             return []
         items = []
         for info_path in sorted(self.trash_dir.glob("**/.trash_info.json"), reverse=True):
-            with info_path.open("r", encoding="utf-8") as f:
-                info = json.load(f)
+            info = read_json(info_path)
             info["_trash_path"] = str(info_path.parent.relative_to(self.trash_dir))
             items.append(info)
         return items
@@ -690,8 +682,7 @@ class QuestionBank:
         cutoff = datetime.now(timezone.utc) - timedelta(days=TRASH_RETENTION_DAYS)
         for info_path in list(self.trash_dir.glob("**/.trash_info.json")):
             try:
-                with info_path.open("r", encoding="utf-8") as f:
-                    info = json.load(f)
+                info = read_json(info_path)
                 deleted_str = info.get("deleted_at", "")
                 if not deleted_str:
                     continue
@@ -706,8 +697,7 @@ class QuestionBank:
         if not question_dir.exists():
             raise RuntimeError("题目不存在")
         manifest_path = question_dir / "manifest.json"
-        with manifest_path.open("r", encoding="utf-8") as f:
-            manifest = json.load(f)
+        manifest = read_json(manifest_path)
         manifest["title"] = new_title.strip()
         manifest["updated_at"] = datetime.now().isoformat(timespec="seconds")
         self._write_json(manifest_path, manifest)
@@ -721,8 +711,7 @@ class QuestionBank:
     def load_question_bundle(self, relative_path: str) -> dict:
         question_dir = self._resolve_question_path(relative_path)
         manifest_path = question_dir / "manifest.json"
-        with manifest_path.open("r", encoding="utf-8") as file:
-            manifest = json.load(file)
+        manifest = read_json(manifest_path)
 
         normalized_path = question_dir.relative_to(self.root.resolve()).as_posix()
         bundle = {"manifest": manifest, "path": normalized_path}
@@ -750,8 +739,7 @@ class QuestionBank:
             except ValueError as exc:
                 raise RuntimeError("题目资源路径非法") from exc
             if asset_path.suffix == ".json":
-                with asset_path.open("r", encoding="utf-8") as file:
-                    bundle[key] = json.load(file)
+                bundle[key] = read_json(asset_path)
             else:
                 bundle[key] = asset_path.read_text(encoding="utf-8")
         return bundle
@@ -761,15 +749,7 @@ class QuestionBank:
         self._write_json(manifest_path, asdict(manifest))
 
     def _write_json(self, path: Path, data: object) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-        try:
-            with temp_path.open("w", encoding="utf-8") as file:
-                json.dump(data, file, ensure_ascii=False, indent=2)
-            temp_path.replace(path)
-        finally:
-            if temp_path.exists():
-                temp_path.unlink()
+        write_json_atomic(path, data)
 
     def _write_reference_sources(
         self,

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}登录 · 评分系统{% endblock %}
+{% block nav %}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>📊 评分系统</h1>
+  <p class="lead">请使用学生账号登录查看成绩。</p>
+</section>
+
+{% if error %}
+<div class="notice error">{{ error }}</div>
+{% endif %}
+
+<section class="panel">
+  <form class="form" method="post" action="/login">
+    <label>用户名 <input type="text" name="username" required autofocus></label>
+    <label>密码 <input type="password" name="password" required></label>
+    <button class="button primary" type="submit">登录</button>
+  </form>
+</section>
+{% endblock %}

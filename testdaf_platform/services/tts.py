@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+import time
 
 import dashscope
 import requests
@@ -11,6 +12,7 @@ from testdaf_platform.config import (
     QWEN_TTS_INSTRUCT_MODEL,
     QWEN_TTS_MODEL,
 )
+from shared.api_stats import get_api_stats
 
 dashscope.base_http_api_url = DASHSCOPE_BASE_URL
 
@@ -63,7 +65,6 @@ class TTSService:
         }
         used_instruct_model = False
         if instruction:
-            # 指令控制需要使用 instruct 模型；普通 flash 模型不响应 instructions。
             call_kwargs["model"] = self.instruct_model
             call_kwargs["instructions"] = instruction
             call_kwargs["optimize_instructions"] = optimize_instructions
@@ -71,27 +72,51 @@ class TTSService:
         else:
             call_kwargs["model"] = self.model
 
-        resp = dashscope.MultiModalConversation.call(**call_kwargs)
+        model = call_kwargs["model"]
+        stats = get_api_stats()
+        t0 = time.time()
 
-        if resp.status_code != 200:
-            raise RuntimeError(f"API 错误 {resp.status_code}: {resp.message or resp.code}")
+        try:
+            resp = dashscope.MultiModalConversation.call(**call_kwargs)
 
-        audio_url = resp.output.audio.url
-        if not audio_url:
-            raise RuntimeError("API 未返回音频 URL")
+            if resp.status_code != 200:
+                raise RuntimeError(f"API 错误 {resp.status_code}: {resp.message or resp.code}")
 
-        download = self._download_audio(audio_url)
+            audio_url = resp.output.audio.url
+            if not audio_url:
+                raise RuntimeError("API 未返回音频 URL")
 
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        save_path.write_bytes(download.content)
+            download = self._download_audio(audio_url)
 
-        return TTSResult(
-            path=save_path,
-            size_kb=len(download.content) / 1024,
-            audio_url=audio_url,
-            instruction=instruction,
-            used_instruct_model=used_instruct_model,
-        )
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            save_path.write_bytes(download.content)
+
+            result = TTSResult(
+                path=save_path,
+                size_kb=len(download.content) / 1024,
+                audio_url=audio_url,
+                instruction=instruction,
+                used_instruct_model=used_instruct_model,
+            )
+            stats.record_tts(
+                model=model,
+                voice=voice,
+                text_len=len(text),
+                status="ok",
+                elapsed_seconds=time.time() - t0,
+                audio_size_kb=result.size_kb,
+            )
+            return result
+        except Exception as exc:
+            stats.record_tts(
+                model=model,
+                voice=voice,
+                text_len=len(text),
+                status="error",
+                error_message=str(exc),
+                elapsed_seconds=time.time() - t0,
+            )
+            raise
 
     def _download_audio(self, audio_url: str) -> requests.Response:
         last_error: Exception | None = None

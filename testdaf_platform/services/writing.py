@@ -1,15 +1,14 @@
 """TestDaF 写作题生成服务。"""
 
 import html
-import json
 import math
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import dashscope
 
 from testdaf_platform.config import DASHSCOPE_BASE_URL, QWEN_TEXT_MODEL
+from testdaf_platform.services.generation_utils import parse_json
 from testdaf_platform.services.text_generation import TextGenerationClient
 
 dashscope.base_http_api_url = DASHSCOPE_BASE_URL
@@ -59,14 +58,14 @@ class WritingAufgabe1Generator:
                 messages=[{"role": "user", "content": self._user_prompt(data)}],
                 max_tokens=6000,
             )
-            return self._parse_json(text)
+            return parse_json(text)
 
         if resp.status_code != 200:
             raise RuntimeError(f"API 错误 {resp.status_code}: {resp.message or resp.code}")
 
         if not text:
             raise RuntimeError("API 未返回写作题内容")
-        return self._parse_json(text)
+        return parse_json(text)
 
     def _build_multimodal_content(self, data: WritingAufgabe1Input) -> list[dict]:
         content: list[dict] = []
@@ -87,19 +86,6 @@ class WritingAufgabe1Generator:
                     parts.append(str(item["text"]))
             return "\n".join(parts).strip()
         return str(content).strip()
-
-    def _parse_json(self, content: str) -> dict:
-        cleaned = content.strip()
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r"^```(?:json)?", "", cleaned).strip()
-            cleaned = re.sub(r"```$", "", cleaned).strip()
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-            if not match:
-                raise RuntimeError("无法从 API 响应中解析写作题 JSON")
-            return json.loads(match.group(0))
 
     def _user_prompt(self, data: WritingAufgabe1Input) -> str:
         reference = data.reference_material or "无额外文字或网页参考素材。"

@@ -172,6 +172,14 @@ def get_job(job_id: str) -> JSONResponse:
         return JSONResponse({"status": "not_found", "error": "任务不存在"}, status_code=404)
 
 
+@app.post("/jobs/{job_id}/cancel")
+def cancel_job(job_id: str) -> JSONResponse:
+    ok = job_manager.cancel(job_id)
+    if ok:
+        return JSONResponse({"status": "cancelled"})
+    return JSONResponse({"status": "not_cancelled", "error": "任务可能已完成或不存在"}, status_code=404)
+
+
 @app.get("/api/audio-download/{question_id}")
 def download_audio_with_ambient(question_id: str, ambient: str = "") -> StreamingResponse:
     question = question_bank.get_question(question_id)
@@ -657,6 +665,74 @@ async def create_speaking_aufgabe(request: Request, number: int) -> RedirectResp
     except Exception as exc:
         query = urlencode({"error": str(exc)})
         return RedirectResponse(url=f"/teacher/speaking/aufgabe-{number}?{query}", status_code=303)
+
+
+@app.get("/teacher/stats", response_class=HTMLResponse)
+def teacher_stats(request: Request) -> HTMLResponse:
+    import json
+
+    log_path = Path("logs") / "api_calls.jsonl"
+    stats = {"has_data": False, "text": [], "tts": [], "total_calls": 0}
+    if not log_path.exists():
+        return templates.TemplateResponse(request=request, name="teacher_stats.html", context={"request": request, "stats": stats})
+
+    text_agg: dict[str, dict] = {}
+    tts_agg: dict[str, dict] = {}
+
+    with log_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            stats["total_calls"] += 1
+            stats["has_data"] = True
+            status = entry.get("status", "ok")
+            elapsed = entry.get("elapsed_s", 0) or 0
+            is_ok = 1 if status == "ok" else 0
+            is_err = 1 if status != "ok" else 0
+
+            if entry.get("type") == "text_generation":
+                model = entry.get("model", "?")
+                bucket = text_agg.setdefault(model, {"model": model, "total": 0, "ok": 0, "error": 0, "sum_s": 0.0})
+                bucket["total"] += 1
+                bucket["ok"] += is_ok
+                bucket["error"] += is_err
+                bucket["sum_s"] += elapsed
+            elif entry.get("type") == "tts":
+                model = entry.get("model", "?")
+                voice = entry.get("voice", "?")
+                key = f"{model}|{voice}"
+                bucket = tts_agg.setdefault(key, {"model": model, "voice": voice, "total": 0, "ok": 0, "error": 0, "sum_s": 0.0, "sum_kb": 0.0})
+                bucket["total"] += 1
+                bucket["ok"] += is_ok
+                bucket["error"] += is_err
+                bucket["sum_s"] += elapsed
+                bucket["sum_kb"] += entry.get("audio_kb", 0) or 0
+
+    for bucket in text_agg.values():
+        bucket["pct"] = round(bucket["ok"] / bucket["total"] * 100) if bucket["total"] else 0
+        bucket["avg_s"] = f"{bucket['sum_s'] / bucket['total']:.1f}s" if bucket["total"] else "-"
+        stats["text"].append(bucket)
+
+    for bucket in tts_agg.values():
+        total = bucket["total"]
+        bucket["avg_s"] = f"{bucket['sum_s'] / total:.1f}s" if total else "-"
+        if bucket["sum_kb"] > 0:
+            kb = bucket["sum_kb"] / total
+            bucket["size"] = f"{kb:.0f} KB" if kb < 1024 else f"{kb / 1024:.1f} MB"
+        else:
+            bucket["size"] = "-"
+        stats["tts"].append(bucket)
+
+    stats["text"].sort(key=lambda r: -r["total"])
+    stats["tts"].sort(key=lambda r: -r["total"])
+
+    return templates.TemplateResponse(request=request, name="teacher_stats.html", context={"request": request, "stats": stats})
 
 
 @app.get("/student", response_class=HTMLResponse)

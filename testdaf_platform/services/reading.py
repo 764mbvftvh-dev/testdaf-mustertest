@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import dashscope
 
 from testdaf_platform.config import DASHSCOPE_BASE_URL, QWEN_TEXT_MODEL
+from testdaf_platform.services.generation_utils import parse_json, reorder_by_evidence
 from testdaf_platform.services.text_generation import TextGenerationClient
 
 dashscope.base_http_api_url = DASHSCOPE_BASE_URL
@@ -32,7 +33,7 @@ AUFGABE_3_HARD_MAX_BYTES = 5400
 MAX_READING_LENGTH_REPAIR_ATTEMPTS = 3
 
 
-def _reorder_by_evidence(payload: dict, items_key: str, text_key: str, *, start_number: int) -> dict:
+def reorder_by_evidence(payload: dict, items_key: str, text_key: str, *, start_number: int) -> dict:
     items = payload.get(items_key, [])
     text = payload.get(text_key, "")
     if not items or not text:
@@ -100,20 +101,7 @@ class BaseReadingGenerator:
             ],
             max_tokens=max_tokens,
         )
-        return self._parse_json(content)
-
-    def _parse_json(self, content: str) -> dict:
-        cleaned = content.strip()
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r"^```(?:json)?", "", cleaned).strip()
-            cleaned = re.sub(r"```$", "", cleaned).strip()
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-            if not match:
-                raise RuntimeError("无法从 API 响应中解析 JSON")
-            return json.loads(match.group(0))
+        return parse_json(content)
 
     def _call_repair(self, api_key: str, system_prompt: str, user_prompt: str, max_tokens: int) -> dict:
         return self._call_generation(api_key, system_prompt, user_prompt, max_tokens)
@@ -541,7 +529,7 @@ class ReadingAufgabe2Generator(BaseReadingGenerator):
         )
         self._validate(payload)
         self._annotate_text_length(payload)
-        return _reorder_by_evidence(payload, "questions", "reading_text", start_number=11)
+        return reorder_by_evidence(payload, "questions", "reading_text", start_number=11)
 
     def _system_prompt(self) -> str:
         return (
@@ -648,7 +636,7 @@ class ReadingAufgabe3Generator(BaseReadingGenerator):
         )
         self._validate(payload)
         self._annotate_text_length(payload)
-        return _reorder_by_evidence(payload, "statements", "reading_text", start_number=21)
+        return reorder_by_evidence(payload, "statements", "reading_text", start_number=21)
 
     def _system_prompt(self) -> str:
         return (

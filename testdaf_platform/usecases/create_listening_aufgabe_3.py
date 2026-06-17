@@ -11,6 +11,7 @@ from testdaf_platform.services.listening_aufgabe_3 import (
 from testdaf_platform.services.multi_speaker_tts import MultiSpeakerTTSService
 from testdaf_platform.services.reference_materials import ReferenceMaterialService
 from testdaf_platform.services.tts_instructions import InstructionGenerator
+from testdaf_platform.services.generation_utils import build_two_voice_map
 from testdaf_platform.storage.question_bank import QuestionBank, QuestionManifest
 from testdaf_platform.usecases._instruction_support import attach_instructions_to_segments
 
@@ -56,7 +57,7 @@ class CreateListeningAufgabe3UseCase:
         topic = request.topic.strip()
         expert_domain = request.expert_domain.strip()
         normalized_multi_point = max(0, min(int(request.multi_point_questions), 3))
-        speaker_voice_map = _build_two_voice_map(request.host_voice, request.expert_voice)
+        speaker_voice_map = build_two_voice_map(request.host_voice, request.expert_voice)
         speaker_genders = {sid: VOICE_GENDER[v] for sid, v in speaker_voice_map.items()}
         reference_bundle = self.reference_material_service.build(
             request.reference_material,
@@ -118,9 +119,3 @@ class CreateListeningAufgabe3UseCase:
             generation=generation,
         )
 
-
-def _build_two_voice_map(speaker_a_voice: str, speaker_b_voice: str) -> dict[str, str]:
-    if speaker_a_voice != speaker_b_voice:
-        return {"A": speaker_a_voice, "B": speaker_b_voice}
-    fallback = "Ethan" if speaker_a_voice != "Ethan" else "Cherry"
-    return {"A": speaker_a_voice, "B": fallback}

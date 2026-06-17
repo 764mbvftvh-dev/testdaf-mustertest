@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}套卷 · 评分详情{% endblock %}
+{% block nav %}
+{% if user.role == "teacher" %}
+<a href="/teacher">📊 总览</a>
+{% else %}
+<a href="/student">📊 首页</a>
+{% endif %}
+<a href="/logout">退出</a>
+{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>🎯 套卷评分</h1>
+  <p class="lead">{{ exam.exam_id }}</p>
+  {% if exam.student_name %}
+  <p class="muted">学生：{{ exam.student_name }} · {{ exam.submitted_at }}</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="exam-cards">
+    {% for module in exam.module_order if module != "speaking" %}
+    {% set m = exam.modules.get(module) %}
+    <div class="exam-card">
+      {% if module == "reading" %}{% set icon = "📖" %}{% set label = "阅读" %}
+      {% elif module == "listening" %}{% set icon = "🎧" %}{% set label = "听力" %}
+      {% else %}{% set icon = "✍️" %}{% set label = "写作" %}{% endif %}
+      <strong>{{ icon }} {{ label }}</strong>
+      {% if m %}
+      <div class="tdn-badge tdn-{{ m.tdn }}">{{ m.tdn_label }}</div>
+      {% if m.total_correct is not none %}
+      <small>{{ m.total_correct }}/{{ m.total_questions }}</small>
+      {% endif %}
+      {% if m.dimensionen %}
+      <small>{{ m.dimensionen.values()|join("·") }}</small>
+      {% endif %}
+      <a class="button small" href="/score/{{ m.attempt_id }}">详情</a>
+      {% else %}
+      <div class="tdn-badge">未评分</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

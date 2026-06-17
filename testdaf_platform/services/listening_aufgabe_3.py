@@ -1,12 +1,12 @@
 """TestDaF 听力 Aufgabe 3 生成服务。"""
 
 import json
-import re
 from dataclasses import dataclass
 
 import dashscope
 
 from testdaf_platform.config import DASHSCOPE_BASE_URL, QWEN_TEXT_MODEL
+from testdaf_platform.services.generation_utils import parse_json, reorder_by_evidence, gendered_speakers_text
 from testdaf_platform.services.text_generation import TextGenerationClient
 
 dashscope.base_http_api_url = DASHSCOPE_BASE_URL
@@ -22,7 +22,7 @@ ALLOWED_SPEAKERS = {"A", "B"}
 ALLOWED_PAUSES = {200, 350, 500, 750, 1000}
 
 
-def _reorder_by_evidence(payload: dict, items_key: str, text_key: str, *, start_number: int) -> dict:
+def reorder_by_evidence(payload: dict, items_key: str, text_key: str, *, start_number: int) -> dict:
     items = payload.get(items_key, [])
     text = payload.get(text_key, "")
     if not items or not text:
@@ -47,7 +47,7 @@ def _reorder_by_evidence(payload: dict, items_key: str, text_key: str, *, start_
     return payload
 
 
-def _gendered_speakers_text(genders: dict[str, str]) -> str:
+def gendered_speakers_text(genders: dict[str, str]) -> str:
     parts = []
     for sid, gender in genders.items():
         label = "女性" if gender == "female" else "男性"
@@ -114,7 +114,7 @@ class ListeningAufgabe3Generator:
                         if progress_callback:
                             progress_callback(95, "答案排序与元数据写入中...")
                         return self._with_length_metadata(
-                            _reorder_by_evidence(payload, "questions", "transcript", start_number=19), "ideal"
+                            reorder_by_evidence(payload, "questions", "transcript", start_number=19), "ideal"
                         )
 
                     if attempt >= MAX_LENGTH_REPAIR_ATTEMPTS:
@@ -122,7 +122,7 @@ class ListeningAufgabe3Generator:
                             if progress_callback:
                                 progress_callback(95, "答案排序与元数据写入中...")
                             return self._with_length_metadata(
-                                _reorder_by_evidence(payload, "questions", "transcript", start_number=19),
+                                reorder_by_evidence(payload, "questions", "transcript", start_number=19),
                                 "accepted_with_warning",
                             )
                         raise Aufgabe3TranscriptLengthError(current_bytes)
@@ -194,7 +194,7 @@ class ListeningAufgabe3Generator:
             max_tokens=8500,
         )
 
-        return self._parse_json(content)
+        return parse_json(content)
 
     def _expand_segments(
         self,
@@ -224,7 +224,7 @@ class ListeningAufgabe3Generator:
             max_tokens=3000,
         )
 
-        repair = self._parse_json(content)
+        repair = parse_json(content)
         new_segments = self._extract_repair_segments(repair)
         insert_after = int(repair.get("insert_after_index", max(len(payload["segments"]) - 1, 1)))
         return self._insert_segments(payload, new_segments, insert_after)
@@ -259,12 +259,12 @@ class ListeningAufgabe3Generator:
             max_tokens=3000,
         )
 
-        repair = self._parse_json(content)
+        repair = parse_json(content)
         replacements = self._extract_repair_segments(repair)
         return self._replace_segments(payload, replacements)
 
     def _system_prompt(self, data: ListeningAufgabe3Input) -> str:
-        gender_text = _gendered_speakers_text(data.speaker_genders)
+        gender_text = gendered_speakers_text(data.speaker_genders)
         return (
             f"{gender_text}"
             "这是强制硬约束——如果指定某说话人为男性，则该角色只能是男性名字和男性身份；"
@@ -317,7 +317,7 @@ class ListeningAufgabe3Generator:
             f"- 难度：{data.difficulty}\n"
             f"- 题目功能组合：{data.question_focus_mix}\n"
             f"- 多信息点题数量：{data.multi_point_questions}\n"
-            f"- 说话人性别：{_gendered_speakers_text(data.speaker_genders)}\n\n"
+            f"- 说话人性别：{gendered_speakers_text(data.speaker_genders)}\n\n"
             f"难度语言规则：{difficulty_instruction}\n"
             "请特别注意：用词、说话方式、术语密度、句子长度、解释层次和信息密度都要匹配专家身份、学术访谈场景和难度。\n\n"
             f"题目功能规则：{focus_instruction}\n"
@@ -472,23 +472,6 @@ class ListeningAufgabe3Generator:
             "  ]\n"
             "}\n"
         )
-
-    def _parse_json(self, content: str) -> dict:
-        cleaned = content.strip()
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r"^```(?:json)?", "", cleaned).strip()
-            cleaned = re.sub(r"```$", "", cleaned).strip()
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            try:
-                result, _ = json.JSONDecoder().raw_decode(cleaned)
-                return result
-            except json.JSONDecodeError:
-                match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-                if not match:
-                    raise RuntimeError("无法从 API 响应中解析 JSON")
-                return json.loads(match.group(0))
 
     def _validate_structure(self, payload: dict) -> None:
         required_keys = {

@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}{% if override_name %}{{ override_name }} 的成绩{% else %}我的成绩{% endif %}{% endblock %}
+{% block nav %}
+{% if user.role == "teacher" %}
+<a href="/teacher">📊 总览</a>
+<a href="/logout">退出</a>
+{% else %}
+<a href="/student">📊 首页</a>
+<a href="/student/list">📋 全部记录</a>
+<a href="/logout">退出</a>
+{% endif %}
+{% endblock %}
+{% block content %}
+<section class="page-head">
+  {% if override_name %}
+  <h1>📊 {{ override_name }} 的成绩</h1>
+  {% else %}
+  <h1>📊 我的成绩 · {{ user.name }}</h1>
+  {% endif %}
+</section>
+
+{% if latest_exam %}
+<section class="panel">
+  <div class="panel-title"><h2>🎯 最新套卷 · {{ latest_exam.created_at[:10] }}</h2></div>
+  <div class="exam-cards">
+    {% for module in latest_exam.module_order if module != "speaking" %}
+    {% set m = latest_exam.modules.get(module) %}
+    <div class="exam-card">
+      {% if module == "reading" %}{% set icon = "📖" %}{% set label = "阅读" %}
+      {% elif module == "listening" %}{% set icon = "🎧" %}{% set label = "听力" %}
+      {% elif module == "writing" %}{% set icon = "✍️" %}{% set label = "写作" %}
+      {% else %}{% set icon = "📄" %}{% set label = module %}{% endif %}
+      <strong>{{ icon }} {{ label }}</strong>
+      {% if m %}
+      <div class="tdn-badge tdn-{{ m.tdn }}">{{ m.tdn_label }}</div>
+      {% if m.total_correct is not none %}
+      <small>{{ m.total_correct }}/{{ m.total_questions }} 正确</small>
+      {% endif %}
+      <a class="button small" href="/score/{{ m.attempt_id }}">详情</a>
+      {% else %}
+      <div class="tdn-badge">—</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if latest_practice %}
+<section class="panel">
+  <div class="panel-title"><h2>📝 最新单项练习</h2></div>
+  <div class="exam-cards">
+    {% for key in ["reading", "listening", "writing"] %}
+    {% set p = latest_practice.get(key) %}
+    {% if p %}
+    <div class="exam-card">
+      {% if key == "reading" %}{% set icon = "📖" %}
+      {% elif key == "listening" %}{% set icon = "🎧" %}
+      {% else %}{% set icon = "✍️" %}{% endif %}
+      <strong>{{ icon }} {{ p.title or key }}</strong>
+      <div class="tdn-badge tdn-{{ p.tdn }}">{{ p.tdn_label }}</div>
+      {% if p.correct is not none %}
+      <small>{{ p.correct }}/{{ p.total }} 正确</small>
+      {% endif %}
+      {% if p.dimensionen %}
+      <small>{{ p.dimensionen.values()|join("·") }}</small>
+      {% endif %}
+      <a class="button small" href="/score/{{ p.attempt_id }}">详情</a>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if not latest_exam and not latest_practice and not is_teacher_view %}
+<p class="empty">暂无成绩记录。请先在答题系统中完成练习或考试。</p>
+{% endif %}
+
+{% if is_teacher_view and speaking %}
+<section class="panel speaking-form">
+  <div class="panel-title"><h2>🎤 口语 Sprechen</h2>{% if speaking.updated_at %}<span class="saved-hint">✓ 已保存 · {{ speaking.updated_at }}</span>{% endif %}</div>
+  <form method="post" action="/teacher/student/{{ override_name_id or '' }}/speaking?sort={{ sort or 'name' }}">
+    <div class="speaking-overall">
+      <label>
+        总评 TDN
+        <select name="overall_tdn">
+          <option value="" {% if not speaking.overall_tdn %}selected{% endif %}>—</option>
+          <option value="5" {% if speaking.overall_tdn == '5' %}selected{% endif %}>TDN 5</option>
+          <option value="4" {% if speaking.overall_tdn == '4' %}selected{% endif %}>TDN 4</option>
+          <option value="3" {% if speaking.overall_tdn == '3' %}selected{% endif %}>TDN 3</option>
+          <option value="0" {% if speaking.overall_tdn == '0' %}selected{% endif %}>U3</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="speaking-tasks">
+      {% for i in range(1, 8) %}
+      {% set key = "aufgabe_" ~ i %}
+      {% set val = speaking.tasks.get(key, "") %}
+      <div class="speaking-task-row">
+        <span class="speaking-task-label">Aufgabe {{ i }}</span>
+        <select name="a{{ i }}">
+          <option value="" {% if val == "" %}selected{% endif %}>—</option>
+          <option value="sehr gut" {% if val == "sehr gut" %}selected{% endif %}>sehr gut</option>
+          <option value="gut" {% if val == "gut" %}selected{% endif %}>gut</option>
+          <option value="befriedigend" {% if val == "befriedigend" %}selected{% endif %}>befriedigend</option>
+          <option value="ausreichend" {% if val == "ausreichend" %}selected{% endif %}>ausreichend</option>
+          <option value="mangelhaft" {% if val == "mangelhaft" %}selected{% endif %}>mangelhaft</option>
+        </select>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="speaking-actions">
+      <button class="button primary" type="submit">💾 保存口语评分</button>
+    </div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

@@ -168,16 +168,16 @@ class ExportService:
 
         _add_heading(doc, "Profile", level=2)
         for p in g.get("profiles", []):
-            _add_para(doc, f"[{_stripped(p.get('label', ''))}] {_stripped(p.get('description', ''))}")
+            _add_para(doc, f"{p.get('number', '?')}. {_stripped(p.get('need', ''))}")
 
         _add_heading(doc, "Antworten", level=2)
         for a in g.get("answers", []):
             n = a.get("number", "?")
-            corr = f"Angebot {_stripped(a.get('correct_offer_label', ''))} → Profil {_stripped(a.get('correct_profile_label', ''))}"
+            corr = f"Angebot {_stripped(a.get('answer', ''))} → Profil {n}"
             _add_highlighted(doc, f"{n}. Antwort:", corr)
-            expl = _stripped(a.get("explanation", ""))
+            expl = _stripped(a.get("matching_reason", ""))
             if expl:
-                _add_highlighted(doc, "   Erklaerung:", expl)
+                _add_highlighted(doc, "   Erklärung:", expl)
 
     def _docx_reading_a2_answers(self, doc: Document, g: dict) -> None:
         _add_heading(doc, _stripped(g.get("title", "A2")), level=1)
@@ -186,8 +186,8 @@ class ExportService:
         _add_heading(doc, "Aufgaben", level=2)
         for q in g.get("questions", []):
             _add_para(doc, f"{q.get('number', '?')}.  {_stripped(q.get('prompt', ''))}")
-            for o in q.get("options", []):
-                _add_para(doc, f"     {_stripped(o.get('label', ''))}) {_stripped(o.get('text', ''))}")
+            for label, text in q.get("options", {}).items():
+                _add_para(doc, f"     {_stripped(label)}) {_stripped(text)}")
 
         _add_heading(doc, "Lesetext", level=2)
         _add_para(doc, _stripped(g.get("reading_text", "")))
@@ -195,12 +195,11 @@ class ExportService:
         _add_heading(doc, "Antworten", level=2)
         for q in g.get("questions", []):
             n = q.get("number", "?")
-            ans = q.get("answer", {})
-            ans = ans.get("label", "") if isinstance(ans, dict) else ans
-            _add_highlighted(doc, f"{n}. Antwort:", _stripped(ans))
-            expl = _stripped(q.get("explanation", ""))
+            ans = _stripped(q.get("answer", ""))
+            _add_highlighted(doc, f"{n}. Antwort:", ans)
+            expl = _stripped(q.get("distractor_explanation", ""))
             if expl:
-                _add_highlighted(doc, "   Erklaerung:", expl)
+                _add_highlighted(doc, "   Erklärung:", expl)
 
     def _docx_reading_a3_answers(self, doc: Document, g: dict) -> None:
         _add_heading(doc, _stripped(g.get("title", "A3")), level=1)
@@ -220,7 +219,7 @@ class ExportService:
             _add_highlighted(doc, f"{n}. Antwort:", _stripped(s.get("answer", "")))
             expl = _stripped(s.get("explanation", ""))
             if expl:
-                _add_highlighted(doc, "   Erklaerung:", expl)
+                _add_highlighted(doc, "   Erklärung:", expl)
 
     # ==================================================================
     # Listening 含答案

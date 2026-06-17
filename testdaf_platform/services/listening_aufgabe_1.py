@@ -1,13 +1,13 @@
-"""TestDaF 听力 Aufgabe 1 生成服务。"""
+﻿"""TestDaF 听力 Aufgabe 1 生成服务。"""
 
 import json
-import re
 from dataclasses import dataclass
 
 import dashscope
 
 from testdaf_platform.config import DASHSCOPE_BASE_URL, QWEN_TEXT_MODEL
 from testdaf_platform.services.text_generation import TextGenerationClient
+from testdaf_platform.services.generation_utils import parse_json, reorder_by_evidence, gendered_speakers_text
 
 dashscope.base_http_api_url = DASHSCOPE_BASE_URL
 
@@ -17,39 +17,6 @@ TARGET_TRANSCRIPT_BYTES = 2857
 HARD_MIN_TRANSCRIPT_BYTES = 2500
 HARD_MAX_TRANSCRIPT_BYTES = 3300
 MAX_LENGTH_REPAIR_ATTEMPTS = 3
-
-
-def _reorder_by_evidence(payload: dict, items_key: str, text_key: str, *, start_number: int) -> dict:
-    items = payload.get(items_key, [])
-    text = payload.get(text_key, "")
-    if not items or not text:
-        return payload
-
-    anchored: list[tuple[int, dict]] = []
-    unanchored: list[dict] = []
-    for item in items:
-        evidence = str(item.get("evidence", ""))
-        pos = text.find(evidence) if evidence else -1
-        if pos >= 0:
-            anchored.append((pos, item))
-        else:
-            unanchored.append(item)
-
-    anchored.sort(key=lambda entry: entry[0])
-    reordered = [item for _, item in anchored] + unanchored
-    for idx, item in enumerate(reordered):
-        item["number"] = start_number + idx
-
-    payload[items_key] = reordered
-    return payload
-
-
-def _gendered_speakers_text(genders: dict[str, str]) -> str:
-    parts = []
-    for sid, gender in genders.items():
-        label = "女性" if gender == "female" else "男性"
-        parts.append(f"说话人 {sid} 必须是{label}角色")
-    return "；".join(parts) + "。请自动决定合适的身份（如学生、教授、职员等）。"
 
 
 class TranscriptLengthError(RuntimeError):
@@ -99,7 +66,7 @@ class ListeningAufgabe1Generator:
                 if progress_callback:
                     progress_callback(95, "答案排序与元数据写入中...")
                 return self._with_length_metadata(
-                    _reorder_by_evidence(payload, "questions", "transcript", start_number=1), "ideal"
+                    reorder_by_evidence(payload, "questions", "transcript", start_number=1), "ideal"
                 )
 
             if attempt >= MAX_LENGTH_REPAIR_ATTEMPTS:
@@ -107,7 +74,7 @@ class ListeningAufgabe1Generator:
                     if progress_callback:
                         progress_callback(95, "答案排序与元数据写入中...")
                     return self._with_length_metadata(
-                        _reorder_by_evidence(payload, "questions", "transcript", start_number=1),
+                        reorder_by_evidence(payload, "questions", "transcript", start_number=1),
                         "accepted_with_warning",
                     )
                 raise TranscriptLengthError(current_bytes)
@@ -163,7 +130,7 @@ class ListeningAufgabe1Generator:
             max_tokens=6000,
         )
 
-        return self._parse_json(content)
+        return parse_json(content, label="听力 Aufg.1 JSON")
 
     def _expand_segments(
         self,
@@ -196,7 +163,7 @@ class ListeningAufgabe1Generator:
             max_tokens=2500,
         )
 
-        repair = self._parse_json(content)
+        repair = parse_json(content)
         new_segments = self._extract_repair_segments(repair)
         insert_after = int(repair.get("insert_after_index", max(len(payload["segments"]) - 1, 1)))
         return self._insert_segments(payload, new_segments, insert_after)
@@ -234,13 +201,13 @@ class ListeningAufgabe1Generator:
             max_tokens=2500,
         )
 
-        repair = self._parse_json(content)
+        repair = parse_json(content)
         replacements = self._extract_repair_segments(repair)
         return self._replace_segments(payload, replacements)
 
 
     def _system_prompt(self, data: ListeningAufgabe1Input) -> str:
-        gender_text = _gendered_speakers_text(data.speaker_genders)
+        gender_text = gendered_speakers_text(data.speaker_genders)
         return (
             f"{gender_text}"
             "这是强制硬约束——如果指定某说话人为男性，则该角色只能是男性名字和男性身份；"
@@ -287,7 +254,7 @@ class ListeningAufgabe1Generator:
             f"- 参考素材：{reference}\n"
             f"- 难度：{data.difficulty}\n"
             f"- 信息流控制：{data.information_flow}\n"
-            f"- 说话人性别：{_gendered_speakers_text(data.speaker_genders)}\n\n"
+            f"- 说话人性别：{gendered_speakers_text(data.speaker_genders)}\n\n"
             f"信息流规则：{flow_instruction}\n\n"
             "篇幅要求：\n"
             "- transcript 的 UTF-8 byte length 目标约 2857。\n"
@@ -434,23 +401,6 @@ class ListeningAufgabe1Generator:
             "  ]\n"
             "}\n"
         )
-
-    def _parse_json(self, content: str) -> dict:
-        cleaned = content.strip()
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r"^```(?:json)?", "", cleaned).strip()
-            cleaned = re.sub(r"```$", "", cleaned).strip()
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            try:
-                result, _ = json.JSONDecoder().raw_decode(cleaned)
-                return result
-            except json.JSONDecodeError:
-                match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-                if not match:
-                    raise RuntimeError("无法从 API 响应中解析 JSON")
-                return json.loads(match.group(0))
 
     def _validate_payload(self, payload: dict) -> None:
         self._validate_structure(payload)

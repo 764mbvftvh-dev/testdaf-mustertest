@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}全部成绩{% endblock %}
+{% block nav %}
+<a href="/student">📊 首页</a>
+<a href="/student/list">📋 全部记录</a>
+<a href="/logout">退出</a>
+{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>📋 我的全部成绩</h1>
+  <div class="actions">
+    <a class="button {% if sort == 'time' %}primary{% else %}secondary{% endif %}" href="/student/list?sort=time">时间 ↓</a>
+    <a class="button {% if sort == 'section' %}primary{% else %}secondary{% endif %}" href="/student/list?sort=section">科目</a>
+  </div>
+</section>
+
+{% if results %}
+<section class="panel student-table">
+  <div class="table">
+    {% for r in results %}
+    <article class="table-row">
+      <div>
+        {% set icon, label = section_labels.get(r.section, ("📄", r.section)) %}
+        <strong>{{ icon }} {{ label }}</strong>
+        <small>{{ r.title }} · {{ r.submitted_at }}</small>
+      </div>
+      <div class="table-actions">
+        <span class="tdn-badge tdn-{{ r.tdn }}">{{ r.tdn_label }}</span>
+        {% if r.correct is not none %}
+        <small>{{ r.correct }}/{{ r.total }}</small>
+        {% endif %}
+        {% if r.dimensionen %}
+        <small>{{ r.dimensionen.values()|join("·") }}</small>
+        {% endif %}
+        <a class="button small" href="/score/{{ r.attempt_id }}">详情</a>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% else %}
+<p class="empty">暂无成绩记录。</p>
+{% endif %}
+{% endblock %}

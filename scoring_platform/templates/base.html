@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}评分系统{% endblock %}</title>
+  <link rel="stylesheet" href="/static/score.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><strong>📊 评分系统</strong></div>
+      <nav class="nav">
+        {% block nav %}{% endblock %}
+      </nav>
+      <div class="sidebar-footer">
+        {% if user %}
+        <small>{{ user.name }} · {{ user.role }}</small>
+        {% endif %}
+      </div>
+    </aside>
+    <main class="main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

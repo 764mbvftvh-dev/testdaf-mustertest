@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}成绩总览 · 教师{% endblock %}
+{% block nav %}
+<a href="/teacher">📊 总览</a>
+<a href="/logout">退出</a>
+{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>📊 成绩总览 · 教师模式</h1>
+  <div class="actions">
+    <a class="button {% if sort == 'name' %}primary{% else %}secondary{% endif %}" href="/teacher?sort=name">姓名排序</a>
+    <a class="button {% if sort == 'time' %}primary{% else %}secondary{% endif %}" href="/teacher?sort=time">时间排序</a>
+    <a class="button secondary" href="/teacher/export/word?sort={{ sort or 'name' }}">⬇ 导出 Word</a>
+  </div>
+</section>
+
+{% if students %}
+<section class="panel teacher-table">
+  <div class="table">
+    <div class="table-row table-header">
+      <div><strong>学生</strong></div>
+      <div><strong>阅读</strong></div>
+      <div><strong>听力</strong></div>
+      <div><strong>写作</strong></div>
+      <div><strong>口语</strong></div>
+      <div><strong>最近考试</strong></div>
+      <div></div>
+    </div>
+    {% for s in students %}
+    {% set row = student_rows.get(s.student_id, {}) %}
+    <article class="table-row">
+      <div>
+        <strong>{{ s.name }}</strong>
+        <small>{{ s.student_id }}</small>
+      </div>
+      <div><span class="tdn-badge tdn-{{ row.get('reading_tdn', 0) }}">{{ row.get("reading_label", "—") }}</span></div>
+      <div><span class="tdn-badge tdn-{{ row.get('listening_tdn', 0) }}">{{ row.get("listening_label", "—") }}</span></div>
+      <div><span class="tdn-badge tdn-{{ row.get('writing_tdn', 0) }}">{{ row.get("writing_label", "—") }}</span></div>
+      <div><span class="tdn-badge tdn-{{ row.get('speaking_tdn', 0) }}">{{ row.get("speaking_label", "—") }}</span></div>
+      <div>{{ row.get("last_exam", "—") }}</div>
+      <div><a class="button small" href="/teacher/student/{{ s.student_id }}?sort={{ sort or 'name' }}">详情</a></div>
+    </article>
+    {% endfor %}
+  </div>
+  <p class="muted">共 {{ students|length }} 名学生{% if sort == 'name' %}（按姓名排序）{% elif sort == 'time' %}（按时间排序）{% endif %}</p>
+</section>
+{% else %}
+<p class="empty">暂无学生数据。</p>
+{% endif %}
+{% endblock %}

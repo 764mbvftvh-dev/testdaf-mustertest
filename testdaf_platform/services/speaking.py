@@ -1,11 +1,10 @@
 """TestDaF 口语题生成服务。"""
 
-import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from testdaf_platform.config import QWEN_TEXT_MODEL
+from testdaf_platform.services.generation_utils import parse_json
 from testdaf_platform.services.text_generation import TextGenerationClient
 
 
@@ -98,7 +97,7 @@ class SpeakingTaskGenerator:
             api_key=api_key,
             messages=[{"role": "user", "content": content}],
         )
-        payload = self._parse_json(raw_text)
+        payload = parse_json(raw_text)
         self._validate(payload, data.number, profile, expected_chart_count)
         payload["number"] = data.number
         payload["task_type"] = profile["name"]
@@ -186,19 +185,6 @@ class SpeakingTaskGenerator:
             '  "source_note": "素材使用说明，内部字段"\n'
             "}\n"
         )
-
-    def _parse_json(self, content: str) -> dict:
-        cleaned = content.strip()
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r"^```(?:json)?", "", cleaned).strip()
-            cleaned = re.sub(r"```$", "", cleaned).strip()
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-            if not match:
-                raise RuntimeError("无法从 API 响应中解析口语题 JSON")
-            return json.loads(match.group(0))
 
     def _validate(self, payload: dict, number: int, profile: dict, expected_chart_count: int) -> None:
         for key in ("title", "scenario", "prompt_points", "examiner_intro", "chart_specs"):

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ result.title }} · 评分详情{% endblock %}
+{% block nav %}
+{% if user.role == "teacher" %}
+<a href="/teacher">📊 总览</a>
+<a href="/teacher/student/{{ result.student_id }}">返回</a>
+{% else %}
+<a href="/student">📊 首页</a>
+<a href="/student/list">📋 全部</a>
+{% endif %}
+<a href="/logout">退出</a>
+{% endblock %}
+{% block content %}
+<section class="page-head">
+  {% set icon, label = section_labels.get(result.section, ("", result.section)) %}
+  <h1>{{ icon }} {{ label }}</h1>
+  <p class="lead">{{ result.title }}</p>
+  {% if result.student_name %}
+  <p class="muted">学生：{{ result.student_name }} · {{ result.scored_at }}</p>
+  {% endif %}
+</section>
+
+{% set obj = result.objective or {} %}
+{% if obj %}
+<section class="panel">
+  <div class="tdn-hero">
+    <div class="tdn-badge tdn-{{ obj.tdn }}">{{ obj.tdn_label }}</div>
+    <div class="tdn-score">{{ obj.total_correct }} / {{ obj.total_questions }} 正确</div>
+  </div>
+</section>
+
+{% for task in obj.tasks %}
+<section class="panel">
+  <div class="panel-title">
+    <h2>{{ icon }} {{ task.label }}</h2>
+    <span>{{ task.correct }} / {{ task.total }} ✅</span>
+  </div>
+  {% if task.errors %}
+  <div class="table">
+    {% for err in task.errors %}
+    <article class="table-row error-row">
+      <div>
+        <strong>Nr. {{ err.number }}</strong>
+        学生：<code>{{ err.student }}</code> → 正确答案：<code>{{ err.correct }}</code>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty">全部正确！</p>
+  {% endif %}
+</section>
+{% endfor %}
+{% endif %}
+
+{% set wri = result.writing or {} %}
+{% if wri and wri.dimensionen %}
+<section class="panel">
+  <div class="tdn-hero">
+    <div class="tdn-badge tdn-{{ wri.tdn }}">{{ wri.tdn_label }}</div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-title"><h2>评分维度</h2></div>
+  <div class="dimension-list">
+    {% for key, label in dimension_labels.items() %}
+    {% set val = wri.dimensionen.get(key, 3) %}
+    <div class="dimension-row">
+      <span class="dim-label">{{ label }}</span>
+      <div class="dim-dots">
+        {% for i in range(1, 6) %}
+        <span class="dot {% if i == val %}active{% endif %}">●</span>
+        <span class="dot-line">────</span>
+        {% endfor %}
+      </div>
+      <span class="dim-value">{{ val }}</span>
+    </div>
+    <p class="dim-desc">{{ dimension_descriptions.get(key, {}).get(val, "") }}</p>
+    {% endfor %}
+  </div>
+</section>
+
+{% if wri.kommentar %}
+<section class="panel">
+  <div class="panel-title"><h2>📝 评语 / Bewertungskommentar</h2></div>
+  <p>{{ wri.kommentar }}</p>
+</section>
+{% endif %}
+{% endif %}
+
+{% if wri and wri.error %}
+<section class="panel">
+  <div class="notice error">{{ wri.error }}</div>
+</section>
+{% endif %}
+{% endblock %}

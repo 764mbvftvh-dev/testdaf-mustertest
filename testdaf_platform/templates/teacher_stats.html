@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}API 用量统计 · TestDaF Studio{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <h1>API 用量统计</h1>
+  <p class="lead">记录 DashScope 文本生成与语音合成调用次数、成功率、耗时和音频大小。</p>
+</section>
+
+{% if not stats.has_data %}
+<p class="empty">暂无 API 调用记录。出题后会自动记录。</p>
+{% endif %}
+
+{% if stats.text %}
+<section class="panel">
+  <div class="panel-title"><h2>文本生成 Text Generation</h2></div>
+  <div class="table">
+    <div class="table-row table-header">
+      <div>模型</div><div>调用</div><div>成功</div><div>失败</div><div>成功率</div><div>平均耗时</div>
+    </div>
+    {% for row in stats.text %}
+    <div class="table-row">
+      <div><code>{{ row.model }}</code></div>
+      <div>{{ row.total }}</div>
+      <div>{{ row.ok }}</div>
+      <div>{{ row.error }}</div>
+      <div><span class="tdn-badge {% if row.pct >= 95 %}tdn-5{% elif row.pct >= 80 %}tdn-3{% else %}tdn-0{% endif %}">{{ row.pct }}%</span></div>
+      <div>{{ row.avg_s }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if stats.tts %}
+<section class="panel">
+  <div class="panel-title"><h2>语音合成 TTS</h2></div>
+  <div class="table">
+    <div class="table-row table-header">
+      <div>模型</div><div>音色</div><div>调用</div><div>成功</div><div>失败</div><div>平均耗时</div><div>音频大小</div>
+    </div>
+    {% for row in stats.tts %}
+    <div class="table-row">
+      <div><code>{{ row.model }}</code></div>
+      <div>{{ row.voice }}</div>
+      <div>{{ row.total }}</div>
+      <div>{{ row.ok }}</div>
+      <div>{{ row.error }}</div>
+      <div>{{ row.avg_s }}</div>
+      <div>{{ row.size }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if stats.has_data %}
+<p class="muted">记录文件：<code>logs/api_calls.jsonl</code> · 共 {{ stats.total_calls }} 条记录</p>
+{% endif %}
+{% endblock %}

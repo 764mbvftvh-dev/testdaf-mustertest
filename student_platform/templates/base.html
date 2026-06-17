@@ -13,6 +13,7 @@
       <a href="/exam">整卷模考</a>
       <a href="/exams">考试记录</a>
       <a href="/attempts">作答记录</a>
+      <a href="http://localhost:8003">📊 评分结果</a>
       {% if current_student %}
         <span class="whoami">你好，{{ current_student.name }}</span>
         <a href="{{ account_system_url | default('/') }}profile">个人中心</a>
